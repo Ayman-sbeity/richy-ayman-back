@@ -13,6 +13,9 @@ import userRoutes from "./routes/userRoutes.js";
 import contactRoutes from "./routes/contactRoutes.js";
 import cartRoutes from "./routes/cartRoutes.js";
 import orderRoutes from "./routes/orderRoutes.js";
+import subscriptionRoutes from "./routes/subscriptionRoutes.js";
+import userSubscriptionRoutes from "./routes/userSubscriptionRoutes.js";
+import listingRoutes from "./routes/listingRoutes.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -62,6 +65,9 @@ app.use("/api/users", userRoutes);
 app.use("/api/contact", contactRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/orders", orderRoutes);
+app.use("/api/subscriptions", subscriptionRoutes);
+app.use("/api/user-subscriptions", userSubscriptionRoutes);
+app.use("/api/listings", listingRoutes);
 
 
 app.get("/", (req, res) => {

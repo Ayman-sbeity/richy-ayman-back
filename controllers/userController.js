@@ -4,10 +4,10 @@ import jwt from "jsonwebtoken";
 
 export const registerUser = async (req, res) => {
   console.log('registerUser called with body:', req.body);
-  const { name, email, password, role } = req.body;
+  const { name, email, password, type } = req.body;
 
-  if (!name || !email || !password) {
-    return res.status(400).json({ message: "All fields are required" });
+  if (!name || !email || !password || !type) {
+    return res.status(400).json({ message: "All fields are required (name, email, password, type)" });
   }
 
   if (name.trim().length < 2) {
@@ -22,8 +22,11 @@ export const registerUser = async (req, res) => {
     return res.status(400).json({ message: "Password must be at least 6 characters long" });
   }
 
+  if (!['owner', 'realtor'].includes(type)) {
+    return res.status(400).json({ message: "Type must be either 'owner' or 'realtor'" });
+  }
+
   try {
-    
     const userExists = await User.findOne({ email });
     if (userExists) {
       console.log('User already exists:', email);
@@ -33,7 +36,7 @@ export const registerUser = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const user = new User({ name, email, password: hashedPassword, role: role || 'user' });
+    const user = new User({ name, email, password_hash: hashedPassword, type });
     const savedUser = await user.save();
     console.log('User created successfully:', savedUser._id);
 
@@ -45,7 +48,7 @@ export const registerUser = async (req, res) => {
       _id: savedUser._id,
       name: savedUser.name,
       email: savedUser.email,
-      role: savedUser.role,
+      type: savedUser.type,
       token,
     });
   } catch (err) {
@@ -70,7 +73,7 @@ export const loginUser = async (req, res) => {
   try {
     console.log('🔍 Looking for user with email:', email);
     const user = await User.findOne({ email });
-    
+
     if (!user) {
       console.log('❌ User not found');
       return res.status(400).json({ message: "Invalid credentials" });
@@ -80,11 +83,11 @@ export const loginUser = async (req, res) => {
       id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role,
-      hasRole: !!user.role
+      type: user.type
     });
 
-    const isMatch = await bcrypt.compare(password, user.password);
+    const storedHash = user.password_hash;
+    const isMatch = await bcrypt.compare(password, storedHash);
     if (!isMatch) {
       console.log('❌ Password mismatch');
       return res.status(400).json({ message: "Invalid credentials" });
@@ -112,7 +115,7 @@ export const loginUser = async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role || 'user',
+      type: user.type,
       token: token
     };
 
@@ -126,7 +129,7 @@ export const loginUser = async (req, res) => {
 };
 export const getUsers = async (req, res) => {
   try {
-    const users = await User.find().select('-password'); 
+    const users = await User.find().select('-password_hash'); 
     res.json(users);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -135,7 +138,7 @@ export const getUsers = async (req, res) => {
 
 export const getCurrentUser = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findById(req.user.id).select('-password_hash');
     res.json(user);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -147,7 +150,7 @@ export const getUserById = async (req, res) => {
     const { id } = req.params;
     console.log('🔍 Getting user by ID:', id);
     
-    const user = await User.findById(id).select('-password');
+  const user = await User.findById(id).select('-password_hash');
     
     if (!user) {
       console.log('❌ User not found with ID:', id);
@@ -165,7 +168,7 @@ export const getUserById = async (req, res) => {
       _id: user._id,
       name: user.name,
       email: user.email,
-      role: user.role || 'user',
+      type: user.type,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt
     });
@@ -178,7 +181,7 @@ export const getUserById = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, role, password } = req.body;
+  const { name, email, type, password } = req.body;
     
     console.log('🔄 Updating user with ID:', id);
     
@@ -190,11 +193,11 @@ export const updateUser = async (req, res) => {
 
     if (name) user.name = name;
     if (email) user.email = email;
-    if (role) user.role = role;
+    if (type) user.type = type;
 
     if (password && password.length >= 6) {
       const salt = await bcrypt.genSalt(10);
-      user.password = await bcrypt.hash(password, salt);
+      user.password_hash = await bcrypt.hash(password, salt);
     }
     
     await user.save();
