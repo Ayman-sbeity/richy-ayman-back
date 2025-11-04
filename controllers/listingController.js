@@ -5,11 +5,10 @@ export const createListing = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id;
     
-    // Check user's subscription
     const subscription = await UserSubscription.findOne({ 
       user_id: userId,
       status: 'active',
-      expirationDate: { $gt: new Date() } // Not expired
+      expirationDate: { $gt: new Date() }
     });
     
     if (!subscription) {
@@ -18,12 +17,11 @@ export const createListing = async (req, res) => {
       });
     }
     
-    // Check listing limits based on plan
     const limits = {
       free: 1,
       basic: 5,
       premium: 20,
-      professional: -1 // unlimited
+      professional: -1
     };
     
     if (limits[subscription.plan] !== -1) {
