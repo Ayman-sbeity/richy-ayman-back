@@ -22,15 +22,12 @@ const listingSchema = new mongoose.Schema(
     features: { type: [String] },
     images: { type: [String] },
     seller_type: { type: String },
-    subscription_plan: { type: String },
-    billing_cycle: { type: String },
     contact_name: { type: String },
     contact_email: { type: String },
     contact_phone: { type: String },
     agency_name: { type: String },
     license_number: { type: String },
     status: { type: String, enum: ["active", "inactive"], default: "active" },
-    expires_at: { type: Date },
   },
   { timestamps: true }
 );

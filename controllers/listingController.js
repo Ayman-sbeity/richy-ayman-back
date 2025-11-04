@@ -1,7 +1,40 @@
 import Listing from "../models/Listing.js";
+import UserSubscription from "../models/UserSubscription.js";
 
 export const createListing = async (req, res) => {
   try {
+    const userId = req.user._id || req.user.id;
+    
+    // Check user's subscription
+    const subscription = await UserSubscription.findOne({ 
+      user_id: userId,
+      status: 'active',
+      expirationDate: { $gt: new Date() } // Not expired
+    });
+    
+    if (!subscription) {
+      return res.status(403).json({ 
+        message: 'Active subscription required to create listings' 
+      });
+    }
+    
+    // Check listing limits based on plan
+    const limits = {
+      free: 1,
+      basic: 5,
+      premium: 20,
+      professional: -1 // unlimited
+    };
+    
+    if (limits[subscription.plan] !== -1) {
+      const count = await Listing.countDocuments({ user_id: userId });
+      if (count >= limits[subscription.plan]) {
+        return res.status(403).json({ 
+          message: `Listing limit reached for ${subscription.plan} plan` 
+        });
+      }
+    }
+
     const normalize = (body, req) => {
       const toNumber = (v) => {
         if (v === undefined || v === null || v === "") return undefined;
@@ -22,7 +55,7 @@ export const createListing = async (req, res) => {
         : [];
 
       return {
-        user_id: body.user_id || req.user?.id,
+        user_id: body.user_id || userId,
         title: body.title,
         description: body.description || "",
         property_type: body.propertyType || body.property_type,
@@ -44,8 +77,6 @@ export const createListing = async (req, res) => {
         license_number: body.licenseNumber,
         status: body.status,
         seller_type: body.sellerType,
-        subscription_plan: body.subscriptionPlan,
-        billing_cycle: body.billingCycle,
       };
     };
 
@@ -127,8 +158,6 @@ export const updateListing = async (req, res) => {
         license_number: body.licenseNumber,
         status: body.status,
         seller_type: body.sellerType,
-        subscription_plan: body.subscriptionPlan,
-        billing_cycle: body.billingCycle,
       };
     };
 
