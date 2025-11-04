@@ -1,12 +1,3 @@
-/**
- * Migration Script: Convert old subscription system to new one
- * 
- * This script migrates from the old per-listing subscription model
- * to the new user-based subscription model.
- * 
- * Run this ONCE after deploying the new code:
- * node migrate-subscriptions.js
- */
 
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
@@ -15,7 +6,6 @@ import UserSubscription from './models/UserSubscription.js';
 
 dotenv.config();
 
-// Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
@@ -33,7 +23,6 @@ async function migrateSubscriptions() {
   try {
     console.log('Starting migration...\n');
 
-    // Step 1: Find all listings with subscription data
     const listingsWithSubscriptions = await Listing.find({
       $or: [
         { subscription_plan: { $exists: true, $ne: null } },
@@ -43,7 +32,6 @@ async function migrateSubscriptions() {
 
     console.log(`Found ${listingsWithSubscriptions.length} listings with subscription data\n`);
 
-    // Step 2: Group by user_id and find the best plan for each user
     const userSubscriptionMap = new Map();
 
     for (const listing of listingsWithSubscriptions) {
@@ -53,8 +41,6 @@ async function migrateSubscriptions() {
         console.log(`⚠️  Skipping listing ${listing._id} - incomplete subscription data`);
         continue;
       }
-
-      // Map old plan names to new plan names
       const planMap = {
         'Free': 'free',
         'free': 'free',
