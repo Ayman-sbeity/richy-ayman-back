@@ -3,12 +3,10 @@ import UserSubscription from "../models/UserSubscription.js";
 
 export const createListing = async (req, res) => {
   try {
-    const userId = req.user._id || req.user.id;
-    
     const subscription = await UserSubscription.findOne({ 
-      user_id: userId,
+      user_id: req.user.id,
       status: 'active',
-      expirationDate: { $gt: new Date() }
+      expirationDate: { $gt: new Date() } // Not expired
     });
     
     if (!subscription) {
@@ -25,7 +23,7 @@ export const createListing = async (req, res) => {
     };
     
     if (limits[subscription.plan] !== -1) {
-      const count = await Listing.countDocuments({ user_id: userId });
+      const count = await Listing.countDocuments({ user_id: req.user.id });
       if (count >= limits[subscription.plan]) {
         return res.status(403).json({ 
           message: `Listing limit reached for ${subscription.plan} plan` 
@@ -53,7 +51,7 @@ export const createListing = async (req, res) => {
         : [];
 
       return {
-        user_id: body.user_id || userId,
+        user_id: body.user_id || req.user?.id,
         title: body.title,
         description: body.description || "",
         property_type: body.propertyType || body.property_type,
@@ -93,10 +91,86 @@ export const createListing = async (req, res) => {
 
 export const getListings = async (req, res) => {
   try {
+    const { 
+      page = 1, 
+      limit = 10, 
+      priceType, 
+      listing_type,
+      seller_type,
+      city, 
+      propertyType,
+      maxPrice,
+      minPrice,
+      bedrooms,
+      bathrooms,
+      minBedrooms,
+      maxBedrooms,
+      minBathrooms,
+      maxBathrooms,
+      features,
+      user_id, 
+      status
+    } = req.query;
+
     const filters = {};
-    if (req.query.user_id) filters.user_id = req.query.user_id;
-    if (req.query.status) filters.status = req.query.status;
-    const listings = await Listing.find(filters);
+    
+    if (user_id) filters.user_id = user_id;
+    if (status) filters.status = status;
+    
+    if (listing_type) {
+      filters.listing_type = { $regex: new RegExp(`^${listing_type.trim()}$`, 'i') };
+    } else if (priceType) {
+      filters.listing_type = priceType;
+    }
+    
+    if (seller_type) {
+      filters.seller_type = { $regex: new RegExp(`^${seller_type.trim()}$`, 'i') };
+    }
+    
+    if (city) {
+      filters.city = { $regex: new RegExp(`^${city.trim()}$`, 'i') };
+    }
+    
+    if (propertyType) {
+      filters.property_type = { $regex: new RegExp(`^${propertyType.trim()}$`, 'i') };
+    }
+    
+    if (minPrice || maxPrice) {
+      filters.price = {};
+      if (minPrice) filters.price.$gte = Number(minPrice);
+      if (maxPrice) filters.price.$lte = Number(maxPrice);
+    }
+    
+    if (bedrooms) {
+      filters.bedrooms = Number(bedrooms.trim());
+    } else if (minBedrooms || maxBedrooms) {
+      filters.bedrooms = {};
+      if (minBedrooms) filters.bedrooms.$gte = Number(minBedrooms.trim());
+      if (maxBedrooms) filters.bedrooms.$lte = Number(maxBedrooms.trim());
+    }
+    
+    if (bathrooms) {
+      filters.bathrooms = Number(bathrooms.trim());
+    } else if (minBathrooms || maxBathrooms) {
+      filters.bathrooms = {};
+      if (minBathrooms) filters.bathrooms.$gte = Number(minBathrooms.trim());
+      if (maxBathrooms) filters.bathrooms.$lte = Number(maxBathrooms.trim());
+    }
+    
+    if (features) {
+      const featuresArray = features.split(',').map(f => f.trim());
+      filters.features = { $all: featuresArray };
+    }
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    const listings = await Listing.find(filters)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
     res.json(listings);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -156,6 +230,8 @@ export const updateListing = async (req, res) => {
         license_number: body.licenseNumber,
         status: body.status,
         seller_type: body.sellerType,
+        subscription_plan: body.subscriptionPlan,
+        billing_cycle: body.billingCycle,
       };
     };
 
