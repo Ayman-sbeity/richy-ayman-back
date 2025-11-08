@@ -1,18 +1,78 @@
 import Listing from "../models/Listing.js";
 import UserSubscription from "../models/UserSubscription.js";
+import { uploadMultipleToImgBB, processImageArray } from "../utils/imgbbUpload.js";
 
 export const createListing = async (req, res) => {
   try {
-    const subscription = await UserSubscription.findOne({ 
-      user_id: req.user.id,
+    // Upload images to ImgBB if files are provided
+    let imageUrls = [];
+    if (req.files && req.files.length > 0) {
+      try {
+        imageUrls = await uploadMultipleToImgBB(req.files);
+      } catch (uploadErr) {
+        return res.status(500).json({ 
+          message: "Image upload failed", 
+          error: uploadErr.message 
+        });
+      }
+    }
+
+    // Process images from request body (base64 or URLs)
+    if (req.body.images) {
+      try {
+        const bodyImages = Array.isArray(req.body.images) 
+          ? req.body.images 
+          : [req.body.images];
+        
+        const processedBodyImages = await processImageArray(bodyImages);
+        imageUrls = [...imageUrls, ...processedBodyImages];
+      } catch (uploadErr) {
+        return res.status(500).json({ 
+          message: "Image processing failed", 
+          error: uploadErr.message 
+        });
+      }
+    }
+
+    // Get user ID (handle both _id and id)
+    const userId = req.user._id || req.user.id;
+
+    let subscription = await UserSubscription.findOne({ 
+      user_id: userId,
       status: 'active',
       expirationDate: { $gt: new Date() } // Not expired
     });
     
+    // If no active subscription found, check if user has any subscription
     if (!subscription) {
-      return res.status(403).json({ 
-        message: 'Active subscription required to create listings' 
-      });
+      const anySubscription = await UserSubscription.findOne({ user_id: userId });
+      
+      if (!anySubscription) {
+        // Auto-create a free subscription for new users
+        console.log(`Creating free subscription for user ${userId}`);
+        subscription = new UserSubscription({
+          user_id: userId,
+          plan: 'free',
+          billingCycle: 'monthly',
+          status: 'active',
+          price: 0,
+          startDate: new Date(),
+          expirationDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000) // 1 year
+        });
+        await subscription.save();
+      } else if (anySubscription.status !== 'active') {
+        return res.status(403).json({ 
+          message: `Your subscription is ${anySubscription.status}. Please activate your subscription to create listings.` 
+        });
+      } else if (anySubscription.expirationDate && anySubscription.expirationDate <= new Date()) {
+        return res.status(403).json({ 
+          message: 'Your subscription has expired. Please renew to create listings.' 
+        });
+      } else {
+        return res.status(403).json({ 
+          message: 'Active subscription required to create listings' 
+        });
+      }
     }
     
     const limits = {
@@ -23,7 +83,7 @@ export const createListing = async (req, res) => {
     };
     
     if (limits[subscription.plan] !== -1) {
-      const count = await Listing.countDocuments({ user_id: req.user.id });
+      const count = await Listing.countDocuments({ user_id: userId });
       if (count >= limits[subscription.plan]) {
         return res.status(403).json({ 
           message: `Listing limit reached for ${subscription.plan} plan` 
@@ -44,14 +104,11 @@ export const createListing = async (req, res) => {
         ? [body.features]
         : [];
 
-      const images = Array.isArray(body.images)
-        ? body.images
-        : body.images
-        ? [body.images]
-        : [];
+      // Use the already processed imageUrls
+      const images = imageUrls;
 
       return {
-        user_id: body.user_id || req.user?.id,
+        user_id: body.user_id || userId,
         title: body.title,
         description: body.description || "",
         property_type: body.propertyType || body.property_type,
@@ -189,6 +246,36 @@ export const getListingById = async (req, res) => {
 
 export const updateListing = async (req, res) => {
   try {
+    // Upload new images to ImgBB if files are provided
+    let imageUrls = [];
+    if (req.files && req.files.length > 0) {
+      try {
+        imageUrls = await uploadMultipleToImgBB(req.files);
+      } catch (uploadErr) {
+        return res.status(500).json({ 
+          message: "Image upload failed", 
+          error: uploadErr.message 
+        });
+      }
+    }
+
+    // Process images from request body (base64 or URLs)
+    if (req.body.images) {
+      try {
+        const bodyImages = Array.isArray(req.body.images) 
+          ? req.body.images 
+          : [req.body.images];
+        
+        const processedBodyImages = await processImageArray(bodyImages);
+        imageUrls = [...imageUrls, ...processedBodyImages];
+      } catch (uploadErr) {
+        return res.status(500).json({ 
+          message: "Image processing failed", 
+          error: uploadErr.message 
+        });
+      }
+    }
+
     const normalize = (body, req) => {
       const toNumber = (v) => {
         if (v === undefined || v === null || v === "") return undefined;
@@ -202,11 +289,8 @@ export const updateListing = async (req, res) => {
         ? [body.features]
         : undefined;
 
-      const images = Array.isArray(body.images)
-        ? body.images
-        : body.images
-        ? [body.images]
-        : undefined;
+      // Use the already processed imageUrls if any were provided
+      const images = imageUrls.length > 0 ? imageUrls : undefined;
 
       return {
         title: body.title,
