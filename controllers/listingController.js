@@ -1,10 +1,11 @@
 import Listing from "../models/Listing.js";
 import UserSubscription from "../models/UserSubscription.js";
+import User from "../models/User.js";
 import { uploadMultipleToImgBB, processImageArray } from "../utils/imgbbUpload.js";
+import { sendNewPropertyNotification } from "../utils/emailService.js";
 
 export const createListing = async (req, res) => {
   try {
-    // Upload images to ImgBB if files are provided
     let imageUrls = [];
     if (req.files && req.files.length > 0) {
       try {
@@ -17,7 +18,6 @@ export const createListing = async (req, res) => {
       }
     }
 
-    // Process images from request body (base64 or URLs)
     if (req.body.images) {
       try {
         const bodyImages = Array.isArray(req.body.images) 
@@ -34,21 +34,18 @@ export const createListing = async (req, res) => {
       }
     }
 
-    // Get user ID (handle both _id and id)
     const userId = req.user._id || req.user.id;
 
     let subscription = await UserSubscription.findOne({ 
       user_id: userId,
       status: 'active',
-      expirationDate: { $gt: new Date() } // Not expired
+      expirationDate: { $gt: new Date() }
     });
     
-    // If no active subscription found, check if user has any subscription
     if (!subscription) {
       const anySubscription = await UserSubscription.findOne({ user_id: userId });
       
       if (!anySubscription) {
-        // Auto-create a free subscription for new users
         console.log(`Creating free subscription for user ${userId}`);
         subscription = new UserSubscription({
           user_id: userId,
@@ -104,7 +101,6 @@ export const createListing = async (req, res) => {
         ? [body.features]
         : [];
 
-      // Use the already processed imageUrls
       const images = imageUrls;
 
       return {
@@ -140,6 +136,24 @@ export const createListing = async (req, res) => {
 
     const listing = new Listing(payload);
     const saved = await listing.save();
+    
+    try {
+      const users = await User.find({}, 'email name');
+      if (users && users.length > 0) {
+        sendNewPropertyNotification(users, {
+          title: saved.title,
+          city: saved.city,
+          property_type: saved.property_type,
+          listing_type: saved.listing_type,
+          price: saved.price
+        }).catch(err => {
+          console.error('Error sending new property notifications:', err);
+        });
+      }
+    } catch (emailErr) {
+      console.error('Error fetching users for notifications:', emailErr);
+    }
+    
     res.status(201).json(saved);
   } catch (err) {
     res.status(400).json({ message: err.message });
@@ -246,7 +260,6 @@ export const getListingById = async (req, res) => {
 
 export const updateListing = async (req, res) => {
   try {
-    // Upload new images to ImgBB if files are provided
     let imageUrls = [];
     if (req.files && req.files.length > 0) {
       try {
@@ -259,7 +272,6 @@ export const updateListing = async (req, res) => {
       }
     }
 
-    // Process images from request body (base64 or URLs)
     if (req.body.images) {
       try {
         const bodyImages = Array.isArray(req.body.images) 
@@ -289,7 +301,6 @@ export const updateListing = async (req, res) => {
         ? [body.features]
         : undefined;
 
-      // Use the already processed imageUrls if any were provided
       const images = imageUrls.length > 0 ? imageUrls : undefined;
 
       return {

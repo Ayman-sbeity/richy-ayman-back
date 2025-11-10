@@ -5,8 +5,6 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-// Configuration
 const API_BASE_URL = 'http://localhost:5002'; // Update with your server URL
 const TEST_USER_EMAIL = 'testuser@imgbb.test'; // Test user email
 const TEST_USER_PASSWORD = 'test123456'; // Test user password
@@ -254,7 +252,6 @@ async function testUpdateListing(listingId) {
   }
 }
 
-// Test 5: Check subscription status
 async function testSubscriptionStatus() {
   console.log('\n📝 Test 5: Checking subscription status...');
   
@@ -267,11 +264,6 @@ async function testSubscriptionStatus() {
         }
       }
     );
-
-    console.log('✅ Subscription retrieved successfully!');
-    console.log('Plan:', response.data.plan);
-    console.log('Status:', response.data.status);
-    console.log('Expiration:', response.data.expirationDate);
     
     return response.data;
   } catch (error) {
@@ -280,53 +272,103 @@ async function testSubscriptionStatus() {
   }
 }
 
-// Test 6: Delete old test listings
-async function deleteOldTestListings() {
-  console.log('\n📝 Cleaning up old test listings...');
+async function testEmailNotification() {
+  console.log('\n� Test 6: Testing email notification for new property...');
   
   try {
-    // Get user's listings
-    const response = await axios.get(
+    const users = await User.find({}, 'email name');
+    console.log(`Found ${users.length} users in database`);
+    
+    if (users.length === 0) {
+      console.log('⚠️  No users found in database. Email test skipped.');
+      return;
+    }
+    
+    const propertyData = {
+      title: 'Beautiful Villa in Miami',
+      city: 'Miami',
+      property_type: 'Villa',
+      listing_type: 'Sale',
+      price: 750000
+    };
+    
+    console.log('📤 Sending email notifications...');
+    console.log(`Property: ${propertyData.title} in ${propertyData.city}`);
+    
+    const result = await sendNewPropertyNotification(users, propertyData);
+    
+    console.log('✅ Email notification test completed!');
+    console.log(`Emails sent: ${result.success}/${result.total}`);
+    
+    if (result.success === result.total) {
+      console.log('🎉 All emails sent successfully!');
+    } else {
+      console.log(`⚠️  ${result.total - result.success} emails failed to send`);
+    }
+    
+    return result;
+  } catch (error) {
+    console.error('❌ Email notification test failed:', error.message);
+    throw error;
+  }
+}
+
+// Test 7: Test listing creation with email notification
+async function testListingCreationWithEmail() {
+  console.log('\n📝 Test 7: Creating listing and testing email notification...');
+  
+  try {
+    // Create a simple 1x1 pixel green PNG in base64
+    const greenPixelBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+    
+    const listingData = {
+      title: 'Email Test Property - Luxury Apartment',
+      description: 'This listing should trigger email notifications to all users',
+      price: 500000,
+      location: '789 Email Test Blvd, San Francisco, CA, USA',
+      city: 'San Francisco',
+      property_type: 'apartment',
+      listing_type: 'Sale',
+      bedrooms: 2,
+      bathrooms: 2,
+      area: 1200,
+      images: [
+        `data:image/png;base64,${greenPixelBase64}`
+      ]
+    };
+
+    console.log('🏠 Creating listing that should trigger email notifications...');
+    const response = await axios.post(
       `${API_BASE_URL}/api/listings`,
+      listingData,
       {
         headers: {
-          'Authorization': `Bearer ${authToken}`
+          'Authorization': `Bearer ${authToken}`,
+          'Content-Type': 'application/json'
         }
       }
     );
 
-    const testListings = response.data.filter(listing => 
-      listing.title && listing.title.includes('Test Property')
-    );
-
-    console.log(`Found ${testListings.length} test listings to clean up`);
-
-    for (const listing of testListings) {
-      try {
-        await axios.delete(
-          `${API_BASE_URL}/api/listings/${listing._id}`,
-          {
-            headers: {
-              'Authorization': `Bearer ${authToken}`
-            }
-          }
-        );
-        console.log(`✅ Deleted listing: ${listing._id}`);
-      } catch (delError) {
-        console.log(`⚠️  Could not delete listing ${listing._id}:`, delError.response?.data || delError.message);
-      }
-    }
+    console.log('✅ Listing created successfully!');
+    console.log('Listing ID:', response.data._id);
+    console.log('Title:', response.data.title);
+    console.log('City:', response.data.city);
+    console.log('📧 Email notifications should have been sent to all users');
+    console.log('Check server logs for email sending confirmation');
     
-    return testListings.length;
+    return response.data;
   } catch (error) {
-    console.log('⚠️  Could not clean up old listings:', error.response?.data || error.message);
-    return 0;
+    console.error('❌ Test failed:', error.response?.data || error.message);
+    if (error.response?.data) {
+      console.error('Error details:', JSON.stringify(error.response.data, null, 2));
+    }
+    throw error;
   }
 }
 
 // Main test runner
 async function runTests() {
-  console.log('🚀 Starting ImgBB Image Upload Tests...');
+  console.log('🚀 Starting ImgBB Image Upload & Email Notification Tests...');
   console.log('=====================================\n');
   
   try {
@@ -369,6 +411,14 @@ async function runTests() {
       await testUpdateListing(listing2._id);
     }
     
+    // Test email notification function directly
+    console.log('\n🎯 Testing email notification function...');
+    await testEmailNotification();
+    
+    // Test listing creation with email notification
+    console.log('\n🎯 Testing listing creation with email notification...');
+    const emailTestListing = await testListingCreationWithEmail();
+    
     console.log('\n=====================================');
     console.log('✅ All tests completed successfully!');
     console.log('\n📊 Test Summary:');
@@ -377,6 +427,10 @@ async function runTests() {
     console.log('  - Image update: ✅');
     console.log('  - Images stored on ImgBB: ✅');
     console.log('  - Only URLs saved in database: ✅');
+    console.log('  - Email notification function: ✅');
+    console.log('  - Listing creation with email: ✅');
+    console.log('\n📧 Email notifications should have been sent for the last listing');
+    console.log('Check your email inbox and server logs for confirmation');
     console.log('=====================================\n');
     
   } catch (error) {
