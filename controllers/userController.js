@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 
 export const registerUser = async (req, res) => {
   console.log('registerUser called with body:', req.body);
-  const { name, email, password, type } = req.body;
+  const { name, email, password, type, phone } = req.body;
 
   if (!name || !email || !password || !type) {
     return res.status(400).json({ message: "All fields are required (name, email, password, type)" });
@@ -36,7 +36,7 @@ export const registerUser = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
-    const user = new User({ name, email, password_hash: hashedPassword, type });
+    const user = new User({ name, email, password_hash: hashedPassword, type, phone });
     const savedUser = await user.save();
     console.log('User created successfully:', savedUser._id);
 
@@ -49,6 +49,7 @@ export const registerUser = async (req, res) => {
       name: savedUser.name,
       email: savedUser.email,
       type: savedUser.type,
+      phone: savedUser.phone,
       token,
     });
   } catch (err) {
@@ -116,6 +117,7 @@ export const loginUser = async (req, res) => {
       name: user.name,
       email: user.email,
       type: user.type,
+      phone: user.phone,
       token: token
     };
 
@@ -169,6 +171,7 @@ export const getUserById = async (req, res) => {
       name: user.name,
       email: user.email,
       type: user.type,
+      phone: user.phone,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt
     });
@@ -181,7 +184,7 @@ export const getUserById = async (req, res) => {
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-  const { name, email, type, password } = req.body;
+  const { name, email, type, password, phone } = req.body;
     
     console.log('🔄 Updating user with ID:', id);
     
@@ -194,6 +197,7 @@ export const updateUser = async (req, res) => {
     if (name) user.name = name;
     if (email) user.email = email;
     if (type) user.type = type;
+    if (phone !== undefined) user.phone = phone;
 
     if (password && password.length >= 6) {
       const salt = await bcrypt.genSalt(10);
@@ -214,6 +218,7 @@ export const updateUser = async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      phone: user.phone,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt
     });
